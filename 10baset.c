@@ -24,7 +24,7 @@ to be used as a library
 // Buffer size config
 #define DEF_UDP_PAYLOAD_SIZE    (64)
 // Ethernet
-#define DEF_ETH_DST_MAC         (0xFFFFFFFFFFFF)    // Destination MAC Address
+#define DEF_ETH_DST_MAC         (0XFFFFFFFFFFFF)    // Destination MAC Address
 #define DEF_ETH_SRC_MAC         (0x123456789ABC)    // RasPico MAC Address
 
 // IP Header
@@ -36,22 +36,23 @@ to be used as a library
 #define DEF_IP_DST_DST1         (192)               // Destination IP Address
 #define DEF_IP_DST_DST2         (168)
 #define DEF_IP_DST_DST3         (131)
-#define DEF_IP_DST_DST4         (146)
+#define DEF_IP_DST_DST4         (112)
+
 
 // UDP Header
 #define DEF_UDP_SRC_PORTNUM     (1234)
 #define DEF_UDP_DST_PORTNUM     (1234)
 #define DEF_UDP_LEN             (DEF_UDP_PAYLOAD_SIZE + 8)
 
-uint8_t ip_src_1 = DEF_IP_ADR_SRC1;
-uint8_t ip_src_2 = DEF_IP_ADR_SRC2;
-uint8_t ip_src_3 = DEF_IP_ADR_SRC3;
-uint8_t ip_src_4 = DEF_IP_ADR_SRC4;
+uint8_t ip_src1 = DEF_IP_ADR_SRC1;
+uint8_t ip_src2 = DEF_IP_ADR_SRC2;
+uint8_t ip_src3 = DEF_IP_ADR_SRC3;
+uint8_t ip_src4 = DEF_IP_ADR_SRC4;
 
-uint8_t ip_dst_1 = DEF_IP_DST_DST1;
-uint8_t ip_dst_2 = DEF_IP_DST_DST2;
-uint8_t ip_dst_3 = DEF_IP_DST_DST3;
-uint8_t ip_dst_4 = DEF_IP_DST_DST4;
+uint8_t ip_dst1 = DEF_IP_DST_DST1;
+uint8_t ip_dst2 = DEF_IP_DST_DST2;
+uint8_t ip_dst3 = DEF_IP_DST_DST3;
+uint8_t ip_dst4 = DEF_IP_DST_DST4;
 
 uint16_t src_port = DEF_UDP_SRC_PORTNUM;
 uint16_t dest_port = DEF_UDP_DST_PORTNUM;
@@ -384,8 +385,8 @@ void udp_packet_gen_10base(uint32_t *buf, uint8_t *udp_payload)
     uint32_t i, j, idx = 0, ans;
 
     // Calculate the ip check sum
-    ip_chk_sum1 = 0x0000C512 + ip_identifier + ip_total_len + (DEF_IP_ADR_SRC1 << 8) + DEF_IP_ADR_SRC2 + (DEF_IP_ADR_SRC3 << 8) + DEF_IP_ADR_SRC4 +
-                  (DEF_IP_DST_DST1 << 8) + DEF_IP_DST_DST2 + (DEF_IP_DST_DST3 << 8) + DEF_IP_DST_DST4;
+    ip_chk_sum1 = 0x0000C512 + ip_identifier + ip_total_len + (ip_src1 << 8) + ip_src2 + (ip_src3 << 8) + ip_src4 +
+                  (ip_dst1 << 8) + ip_dst2 + (ip_dst3 << 8) + ip_dst4;
     ip_chk_sum2 = (ip_chk_sum1 & 0x0000FFFF) + (ip_chk_sum1 >> 16);
     ip_chk_sum3 = ~((ip_chk_sum2 & 0x0000FFFF) + (ip_chk_sum2 >> 16));
 
@@ -431,15 +432,15 @@ void udp_packet_gen_10base(uint32_t *buf, uint8_t *udp_payload)
     data_8b[idx++] = (ip_chk_sum3 >> 8) & 0xFF;
     data_8b[idx++] = (ip_chk_sum3 >> 0) & 0xFF;
     // IP Source
-    data_8b[idx++] = ip_src_1;
-    data_8b[idx++] = ip_src_2;
-    data_8b[idx++] = ip_src_3;
-    data_8b[idx++] = ip_src_4;
+    data_8b[idx++] = ip_src1;
+    data_8b[idx++] = ip_src2;
+    data_8b[idx++] = ip_src3;
+    data_8b[idx++] = ip_src4;
     // IP Destination
-    data_8b[idx++] = ip_dst_1;
-    data_8b[idx++] = ip_dst_2;
-    data_8b[idx++] = ip_dst_3;
-    data_8b[idx++] = ip_dst_4;
+    data_8b[idx++] = ip_dst1;
+    data_8b[idx++] = ip_dst2;
+    data_8b[idx++] = ip_dst3;
+    data_8b[idx++] = ip_dst4;
     // UDP header
     data_8b[idx++] = (src_port >> 8) & 0xFF;
     data_8b[idx++] = (src_port >> 0) & 0xFF;
@@ -585,18 +586,18 @@ void eth_core_start()
 
 void eth_set_ip(uint8_t ip1, uint8_t ip2, uint8_t ip3, uint8_t ip4)
 {
-    ip_src_1 = ip1;
-    ip_src_2 = ip2;
-    ip_src_3 = ip3;
-    ip_src_4 = ip4;
+    ip_src1 = ip1;
+    ip_src2 = ip2;
+    ip_src3 = ip3;
+    ip_src4 = ip4;
 }
 
 void eth_set_dest(uint8_t ip1, uint8_t ip2, uint8_t ip3, uint8_t ip4)
 {
-    ip_dst_1 = ip1;
-    ip_dst_2 = ip2;
-    ip_dst_3 = ip3;
-    ip_dst_4 = ip4;
+    ip_dst1 = ip1;
+    ip_dst2 = ip2;
+    ip_dst3 = ip3;
+    ip_dst4 = ip4;
 }
 
 void udp_printf(const char *format, ...)
