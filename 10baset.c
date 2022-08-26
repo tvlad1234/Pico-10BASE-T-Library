@@ -12,20 +12,27 @@ to be used as a library
 
 #include "10baset.h"
 
+#include "pico/stdlib.h"
 #include "string.h"
 #include "stdarg.h"
+
 #include "pico/multicore.h"
 #include "pico/util/queue.h"
+#include "pico/unique_id.h"
+
 #include "hardware/pio.h"
-#include "ser_10base_t.pio.h"
-#include "pico/stdlib.h"
 #include "hardware/irq.h"
+
+#include "ser_10base_t.pio.h"
 
 // Buffer size config
 #define DEF_UDP_PAYLOAD_SIZE    (64)
 // Ethernet
 #define DEF_ETH_DST_MAC         (0XFFFFFFFFFFFF)    // Destination MAC Address
-#define DEF_ETH_SRC_MAC         (0x123456789ABC)    // RasPico MAC Address
+#define DEF_ETH_SRC_MAC         (0xE45F01000000)    // RasPico MAC Address, starting with Raspberry Pi Foundation OUI.
+//a MAC address unique to each board gets generated when initalizing the Ethernet stuff, by filling the zeroes with the last three bytes of the flash serial number. 
+
+uint64_t mac_src = DEF_ETH_SRC_MAC;
 
 // IP Header
 #define DEF_IP_ADR_SRC1         (192)               // RasPico IP Address
@@ -408,12 +415,12 @@ void udp_packet_gen_10base(uint32_t *buf, uint8_t *udp_payload)
     data_8b[idx++] = (DEF_ETH_DST_MAC >> 8) & 0xFF;
     data_8b[idx++] = (DEF_ETH_DST_MAC >> 0) & 0xFF;
     // Source MAC Address
-    data_8b[idx++] = (DEF_ETH_SRC_MAC >> 40) & 0xFF;
-    data_8b[idx++] = (DEF_ETH_SRC_MAC >> 32) & 0xFF;
-    data_8b[idx++] = (DEF_ETH_SRC_MAC >> 24) & 0xFF;
-    data_8b[idx++] = (DEF_ETH_SRC_MAC >> 16) & 0xFF;
-    data_8b[idx++] = (DEF_ETH_SRC_MAC >> 8) & 0xFF;
-    data_8b[idx++] = (DEF_ETH_SRC_MAC >> 0) & 0xFF;
+    data_8b[idx++] = (mac_src >> 40) & 0xFF;
+    data_8b[idx++] = (mac_src >> 32) & 0xFF;
+    data_8b[idx++] = (mac_src >> 24) & 0xFF;
+    data_8b[idx++] = (mac_src >> 16) & 0xFF;
+    data_8b[idx++] = (mac_src >> 8) & 0xFF;
+    data_8b[idx++] = (mac_src >> 0) & 0xFF;
     // Ethernet Type
     data_8b[idx++] = (eth_type >> 8) & 0xFF;
     data_8b[idx++] = (eth_type >> 0) & 0xFF;
@@ -516,8 +523,22 @@ void eth_transmit_udp(uint8_t udp_payload[DEF_UDP_PAYLOAD_SIZE])
     }
 }
 
+void eth_generate_mac()
+{
+    pico_unique_board_id_t pico_uid;
+    pico_get_unique_board_id(&pico_uid);
+
+    uint32_t lastBytes = 0;
+    lastBytes |= pico_uid.id[5];
+    lastBytes |= (pico_uid.id[6] << 8);
+    lastBytes |= (pico_uid.id[7] << 16);
+    
+    mac_src |= lastBytes;
+}
+
 void eth_init()
 {
+    eth_generate_mac();
     udp_init();
 
     // 10BASE-T Serializer PIO init
