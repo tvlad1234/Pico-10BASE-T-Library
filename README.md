@@ -15,7 +15,7 @@ The library provides the following functions: \
 `void eth_core_start()` is used to initialize the Ethernet link on the second core and PIO. \
 `void eth_set_ip(uint8_t ip1, uint8_t ip2, uint8_t ip3, uint8_t ip4)` sets the IP address of the board. \
 `void eth_set_dest(uint8_t ip1, uint8_t ip2, uint8_t ip3, uint8_t ip4)` sets the IP address of the destination (a receving computer, for example) \
-`void udp_printf(const char *format, ...)` sends a formatted string to the destination IP address over UDP, on port 1234. It should be used just like a regular printf function, however be mindful of the 64-byte UDP payload size limitation.
+`void udp_printf(const char *format, ...)` sends a formatted string to the destination IP address over UDP, on port 1234. It should be used just like a regular printf function, however be mindful of the 64-byte UDP payload size limitation set in [10baset.h](10baset.h).
 
 
 

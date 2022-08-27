@@ -13,6 +13,8 @@ to be used as a library
 #include "10baset.h"
 
 #include "pico/stdlib.h"
+#include "stdlib.h"
+#include "stdio.h"
 #include "string.h"
 #include "stdarg.h"
 
@@ -25,31 +27,27 @@ to be used as a library
 
 #include "ser_10base_t.pio.h"
 
-// Buffer size config
-#define DEF_UDP_PAYLOAD_SIZE    (64)
 // Ethernet
-#define DEF_ETH_DST_MAC         (0XFFFFFFFFFFFF)    // Destination MAC Address
-#define DEF_ETH_SRC_MAC         (0xE45F01000000)    // RasPico MAC Address, starting with Raspberry Pi Foundation OUI.
-//a MAC address unique to each board gets generated when initalizing the Ethernet stuff, by filling the zeroes with the last three bytes of the flash serial number. 
+#define DEF_ETH_DST_MAC (0XFFFFFFFFFFFF) // Destination MAC Address
+#define DEF_ETH_SRC_MAC (0xE45F01000000) // RasPico MAC Address, starting with Raspberry Pi Foundation OUI.
+// a MAC address unique to each board gets generated when initalizing the Ethernet stuff, by filling the zeroes with the last three bytes of the flash serial number.
 
 uint64_t mac_src = DEF_ETH_SRC_MAC;
 
 // IP Header
-#define DEF_IP_ADR_SRC1         (192)               // RasPico IP Address
-#define DEF_IP_ADR_SRC2         (168)
-#define DEF_IP_ADR_SRC3         (131)
-#define DEF_IP_ADR_SRC4         (176)
+#define DEF_IP_ADR_SRC1 (192) // RasPico IP Address
+#define DEF_IP_ADR_SRC2 (168)
+#define DEF_IP_ADR_SRC3 (131)
+#define DEF_IP_ADR_SRC4 (176)
 
-#define DEF_IP_DST_DST1         (192)               // Destination IP Address
-#define DEF_IP_DST_DST2         (168)
-#define DEF_IP_DST_DST3         (131)
-#define DEF_IP_DST_DST4         (112)
-
+#define DEF_IP_DST_DST1 (192) // Destination IP Address
+#define DEF_IP_DST_DST2 (168)
+#define DEF_IP_DST_DST3 (131)
+#define DEF_IP_DST_DST4 (112)
 
 // UDP Header
-#define DEF_UDP_SRC_PORTNUM     (1234)
-#define DEF_UDP_DST_PORTNUM     (1234)
-#define DEF_UDP_LEN             (DEF_UDP_PAYLOAD_SIZE + 8)
+#define DEF_UDP_SRC_PORTNUM (1234)
+#define DEF_UDP_DST_PORTNUM (1234)
 
 uint8_t ip_src1 = DEF_IP_ADR_SRC1;
 uint8_t ip_src2 = DEF_IP_ADR_SRC2;
@@ -68,24 +66,8 @@ PIO pio_ser_wr = pio0;
 
 queue_t udp_payload_queue;
 
-
-
-// -------------------
-// Preamble     7
-// SFD          1
-// Ether        14
-// IP Header    20
-// UDP Header   8
-// UDP Payload  x
-// FCS          4
-// -------------------
-//              x + 54
-#define DEF_UDP_BUF_SIZE        (DEF_UDP_PAYLOAD_SIZE + 54)
-
-
 void udp_init(void);
-void udp_packet_gen_10base(uint32_t *buf, uint8_t *udp_payload);
-
+void udp_packet_gen_10base(uint32_t *buf, uint8_t *udp_payload, uint16_t payloadLength);
 
 // Manchester table
 // input 8bit, output 32bit, LSB first
@@ -93,8 +75,6 @@ void udp_packet_gen_10base(uint32_t *buf, uint8_t *udp_payload);
 // b01 -> LOW
 // b10 -> HIGH
 // b11 -> not use.
-
-
 const static uint32_t tbl_manchester[256] = {
     0x66666666,
     0x66666669,
@@ -355,7 +335,6 @@ const static uint32_t tbl_manchester[256] = {
 };
 
 static uint32_t crc_table[256];
-static uint8_t data_8b[DEF_UDP_BUF_SIZE];
 static uint16_t ip_identifier = 0;
 static uint32_t ip_chk_sum1, ip_chk_sum2, ip_chk_sum3;
 
@@ -366,7 +345,6 @@ static const uint16_t eth_type = 0x0800; // IP
 static const uint8_t ip_version = 4; // IP v4
 static const uint8_t ip_head_len = 5;
 static const uint8_t ip_type_of_service = 0;
-static const uint16_t ip_total_len = 20 + DEF_UDP_LEN;
 
 static void _make_crc_table(void)
 {
@@ -386,10 +364,16 @@ void udp_init(void)
     _make_crc_table();
 }
 
-void udp_packet_gen_10base(uint32_t *buf, uint8_t *udp_payload)
+void udp_packet_gen_10base(uint32_t *buf, uint8_t *udp_payload, uint16_t payloadLength)
 {
     uint16_t udp_chksum = 0;
     uint32_t i, j, idx = 0, ans;
+
+    uint16_t udp_buf_size = payloadLength + 54;
+    uint16_t udpLen = payloadLength + 8;
+    uint16_t ip_total_len = 20 + udpLen;
+
+    uint8_t *data_8b = calloc(udp_buf_size, sizeof(uint8_t));
 
     // Calculate the ip check sum
     ip_chk_sum1 = 0x0000C512 + ip_identifier + ip_total_len + (ip_src1 << 8) + ip_src2 + (ip_src3 << 8) + ip_src4 +
@@ -453,12 +437,12 @@ void udp_packet_gen_10base(uint32_t *buf, uint8_t *udp_payload)
     data_8b[idx++] = (src_port >> 0) & 0xFF;
     data_8b[idx++] = (dest_port >> 8) & 0xFF;
     data_8b[idx++] = (dest_port >> 0) & 0xFF;
-    data_8b[idx++] = (DEF_UDP_LEN >> 8) & 0xFF;
-    data_8b[idx++] = (DEF_UDP_LEN >> 0) & 0xFF;
+    data_8b[idx++] = (udpLen >> 8) & 0xFF;
+    data_8b[idx++] = (udpLen >> 0) & 0xFF;
     data_8b[idx++] = (udp_chksum >> 8) & 0xFF;
     data_8b[idx++] = (udp_chksum >> 0) & 0xFF;
     // UDP payload
-    for (i = 0; i < DEF_UDP_PAYLOAD_SIZE; i++)
+    for (i = 0; i < payloadLength; i++)
     {
         data_8b[idx++] = udp_payload[i];
     }
@@ -481,12 +465,14 @@ void udp_packet_gen_10base(uint32_t *buf, uint8_t *udp_payload)
     //==========================================================================
     // Manchester Encoder
     //==========================================================================
-    for (i = 0; i < DEF_UDP_BUF_SIZE; i++)
+    for (i = 0; i < udp_buf_size; i++)
     {
         buf[i] = tbl_manchester[data_8b[i]];
     }
     // TP_IDL
     buf[i] = 0x00000AAA;
+
+    free(data_8b);
 }
 
 void eth_send_nlp()
@@ -512,15 +498,18 @@ void eth_send_nlp()
     }
 }
 
-void eth_transmit_udp(uint8_t udp_payload[DEF_UDP_PAYLOAD_SIZE])
+void eth_transmit_udp(uint8_t udp_payload[], uint16_t payloadLength)
 {
+    uint16_t udp_buf_size = payloadLength + 54;
+    uint32_t *tx_buf_udp = (uint32_t *)calloc(udp_buf_size + 1, sizeof(uint32_t));
 
-    uint32_t tx_buf_udp[DEF_UDP_BUF_SIZE + 1] = {0};
-    udp_packet_gen_10base(tx_buf_udp, udp_payload);
-    for (uint32_t i = 0; i < DEF_UDP_BUF_SIZE + 1; i++)
+    udp_packet_gen_10base(tx_buf_udp, udp_payload, payloadLength);
+    for (uint32_t i = 0; i < udp_buf_size + 1; i++)
     {
         ser_10base_t_tx_10b(pio_ser_wr, 0, tx_buf_udp[i]);
     }
+
+    free(tx_buf_udp);
 }
 
 void eth_generate_mac()
@@ -532,7 +521,7 @@ void eth_generate_mac()
     lastBytes |= pico_uid.id[5];
     lastBytes |= (pico_uid.id[6] << 8);
     lastBytes |= (pico_uid.id[7] << 16);
-    
+
     mac_src |= lastBytes;
 }
 
@@ -578,11 +567,12 @@ void core1_entry()
 
     while (1)
     {
-        uint8_t payload[DEF_UDP_PAYLOAD_SIZE] = {0};
+        uint8_t payload[MAX_UDP_PAYLOAD_SIZE] = {0};
         if (queue_try_remove(&udp_payload_queue, payload))
         {
+            uint16_t payloadLength = strlen(payload);
             state.transmitting = true;
-            eth_transmit_udp(payload);
+            eth_transmit_udp(payload, payloadLength);
             state.transmitting = false;
             state.ticks = 0;
         }
@@ -598,7 +588,7 @@ void core1_entry()
 
 void eth_core_start()
 {
-    queue_init(&udp_payload_queue, DEF_UDP_PAYLOAD_SIZE, 1);
+    queue_init(&udp_payload_queue, MAX_UDP_PAYLOAD_SIZE, 1);
 
     multicore_reset_core1();
     multicore_fifo_drain();
@@ -623,7 +613,7 @@ void eth_set_dest(uint8_t ip1, uint8_t ip2, uint8_t ip3, uint8_t ip4)
 
 void udp_printf(const char *format, ...)
 {
-    uint8_t payload[DEF_UDP_PAYLOAD_SIZE] = {0};
+    uint8_t payload[MAX_UDP_PAYLOAD_SIZE] = {0};
     va_list args;
     va_start(args, format);
     vsprintf(payload, format, args);

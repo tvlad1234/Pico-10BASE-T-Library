@@ -3,6 +3,9 @@
 
 #include <stdint.h>
 
+// Buffer max size config
+#define MAX_UDP_PAYLOAD_SIZE (64)
+
 // Start ethernet on core 1
 void eth_core_start();
 
