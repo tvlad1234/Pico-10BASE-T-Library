@@ -364,6 +364,12 @@ void udp_init(void)
     _make_crc_table();
 }
 
+void udp_set_port(uint16_t port)
+{
+    dest_port = port;
+    src_port = port;
+}
+
 void udp_packet_gen_10base(uint32_t *buf, uint8_t *udp_payload, uint16_t payloadLength)
 {
     uint16_t udp_chksum = 0;
