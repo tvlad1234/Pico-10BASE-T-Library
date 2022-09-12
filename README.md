@@ -1,6 +1,7 @@
 # Pico-10BASE-T-Library
 Library which allows the Pi Pico to send UDP packets over 10BASE-T Ethernet \
 Based on [Pico-10BASE-T](https://github.com/kingyoPiyo/Pico-10BASE-T) by kingyoPiyo  \
+**Featured on [Hackaday](https://hackaday.com/2022/08/27/an-elegant-ethernet-library-for-your-next-rp2040-project)** \
 Example code can be found [here](https://github.com/tvlad1234/Pico-10BASE-Thermometer)
 
 ## What does it do?
