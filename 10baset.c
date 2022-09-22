@@ -35,39 +35,22 @@ to be used as a library
 uint64_t mac_src = DEF_ETH_SRC_MAC;
 
 // IP Header
-#define DEF_IP_ADR_SRC1 (192) // RasPico IP Address
-#define DEF_IP_ADR_SRC2 (168)
-#define DEF_IP_ADR_SRC3 (131)
-#define DEF_IP_ADR_SRC4 (176)
-
-#define DEF_IP_DST_DST1 (192) // Destination IP Address
-#define DEF_IP_DST_DST2 (168)
-#define DEF_IP_DST_DST3 (131)
-#define DEF_IP_DST_DST4 (112)
-
-// UDP Header
-#define DEF_UDP_SRC_PORTNUM (1234)
-#define DEF_UDP_DST_PORTNUM (1234)
+#define DEF_IP_ADR_SRC1 (255) // RasPico IP Address
+#define DEF_IP_ADR_SRC2 (255)
+#define DEF_IP_ADR_SRC3 (255)
+#define DEF_IP_ADR_SRC4 (255)
 
 uint8_t ip_src1 = DEF_IP_ADR_SRC1;
 uint8_t ip_src2 = DEF_IP_ADR_SRC2;
 uint8_t ip_src3 = DEF_IP_ADR_SRC3;
 uint8_t ip_src4 = DEF_IP_ADR_SRC4;
 
-uint8_t ip_dst1 = DEF_IP_DST_DST1;
-uint8_t ip_dst2 = DEF_IP_DST_DST2;
-uint8_t ip_dst3 = DEF_IP_DST_DST3;
-uint8_t ip_dst4 = DEF_IP_DST_DST4;
-
-uint16_t src_port = DEF_UDP_SRC_PORTNUM;
-uint16_t dest_port = DEF_UDP_DST_PORTNUM;
-
 PIO pio_ser_wr = pio0;
 
 queue_t udp_payload_queue;
 
 void udp_init(void);
-void udp_packet_gen_10base(uint32_t *buf, uint8_t *udp_payload, uint16_t payloadLength);
+void udp_packet_gen_10base(uint32_t *buf, uint8_t *udp_payload, uint16_t payloadLength, uint16_t src_port, uint16_t dest_port, dest_ip_t dest_ip);
 
 // Manchester table
 // input 8bit, output 32bit, LSB first
@@ -364,13 +347,7 @@ void udp_init(void)
     _make_crc_table();
 }
 
-void udp_set_port(uint16_t port)
-{
-    dest_port = port;
-    src_port = port;
-}
-
-void udp_packet_gen_10base(uint32_t *buf, uint8_t *udp_payload, uint16_t payloadLength)
+void udp_packet_gen_10base(uint32_t *buf, uint8_t *udp_payload, uint16_t payloadLength, uint16_t src_port, uint16_t dest_port, dest_ip_t dest_ip)
 {
     uint16_t udp_chksum = 0;
     uint32_t i, j, idx = 0, ans;
@@ -383,7 +360,7 @@ void udp_packet_gen_10base(uint32_t *buf, uint8_t *udp_payload, uint16_t payload
 
     // Calculate the ip check sum
     ip_chk_sum1 = 0x0000C512 + ip_identifier + ip_total_len + (ip_src1 << 8) + ip_src2 + (ip_src3 << 8) + ip_src4 +
-                  (ip_dst1 << 8) + ip_dst2 + (ip_dst3 << 8) + ip_dst4;
+                  (dest_ip.ip1 << 8) + dest_ip.ip2 + (dest_ip.ip3 << 8) + dest_ip.ip4;
     ip_chk_sum2 = (ip_chk_sum1 & 0x0000FFFF) + (ip_chk_sum1 >> 16);
     ip_chk_sum3 = ~((ip_chk_sum2 & 0x0000FFFF) + (ip_chk_sum2 >> 16));
 
@@ -434,10 +411,10 @@ void udp_packet_gen_10base(uint32_t *buf, uint8_t *udp_payload, uint16_t payload
     data_8b[idx++] = ip_src3;
     data_8b[idx++] = ip_src4;
     // IP Destination
-    data_8b[idx++] = ip_dst1;
-    data_8b[idx++] = ip_dst2;
-    data_8b[idx++] = ip_dst3;
-    data_8b[idx++] = ip_dst4;
+    data_8b[idx++] = dest_ip.ip1;
+    data_8b[idx++] = dest_ip.ip2;
+    data_8b[idx++] = dest_ip.ip3;
+    data_8b[idx++] = dest_ip.ip4;
     // UDP header
     data_8b[idx++] = (src_port >> 8) & 0xFF;
     data_8b[idx++] = (src_port >> 0) & 0xFF;
@@ -504,12 +481,12 @@ void eth_send_nlp()
     }
 }
 
-void eth_transmit_udp(uint8_t udp_payload[], uint16_t payloadLength)
+void eth_transmit_udp(uint8_t udp_payload[], uint16_t payloadLength, uint16_t src_port, uint16_t dest_port, dest_ip_t ip)
 {
     uint16_t udp_buf_size = payloadLength + 54;
     uint32_t *tx_buf_udp = (uint32_t *)calloc(udp_buf_size + 1, sizeof(uint32_t));
 
-    udp_packet_gen_10base(tx_buf_udp, udp_payload, payloadLength);
+    udp_packet_gen_10base(tx_buf_udp, udp_payload, payloadLength, src_port, dest_port, ip);
     for (uint32_t i = 0; i < udp_buf_size + 1; i++)
     {
         ser_10base_t_tx_10b(pio_ser_wr, 0, tx_buf_udp[i]);
@@ -560,6 +537,13 @@ static bool nlp_timer_callback(struct repeating_timer *t)
     return true;
 }
 
+struct udp_payload
+{
+    dest_ip_t ip;
+    uint16_t port;
+    uint8_t data[MAX_UDP_PAYLOAD_SIZE];
+};
+
 void core1_entry()
 {
     eth_init();
@@ -569,32 +553,34 @@ void core1_entry()
     state.transmitting = false;
 
     alarm_pool_t *core1_pool = alarm_pool_create(0, 1);
-    alarm_pool_add_repeating_timer_ms(core1_pool, 5, nlp_timer_callback, &state, &nlp_timer);
+    alarm_pool_add_repeating_timer_ms(core1_pool, 16, nlp_timer_callback, &state, &nlp_timer);
 
     while (1)
     {
-        uint8_t payload[MAX_UDP_PAYLOAD_SIZE] = {0};
-        if (queue_try_remove(&udp_payload_queue, payload))
+        struct udp_payload payload;
+        if (!queue_is_empty(&udp_payload_queue))
         {
-            uint16_t payloadLength = strlen(payload);
+            queue_remove_blocking(&udp_payload_queue, &payload);
+            uint16_t payloadLength = strlen(payload.data);
             state.transmitting = true;
-            eth_transmit_udp(payload, payloadLength);
-            state.transmitting = false;
+            eth_transmit_udp(payload.data, payloadLength, payload.port, payload.port, payload.ip);
             state.ticks = 0;
+            state.transmitting = false;
+
         }
-        else if (state.ticks >= 4)
+        else  if (state.ticks >= 1)
         {
             state.transmitting = true;
-            eth_send_nlp();
-            state.transmitting = false;
+            ser_10base_t_tx_10b(pio_ser_wr, 0, 0x0000000A); // send NLP
             state.ticks = 0;
+            state.transmitting = false;
         }
     }
 }
 
 void eth_core_start()
 {
-    queue_init(&udp_payload_queue, MAX_UDP_PAYLOAD_SIZE, 1);
+    queue_init(&udp_payload_queue, sizeof(struct udp_payload), PACKET_QUEUE_LENGTH);
 
     multicore_reset_core1();
     multicore_fifo_drain();
@@ -609,20 +595,15 @@ void eth_set_ip(uint8_t ip1, uint8_t ip2, uint8_t ip3, uint8_t ip4)
     ip_src4 = ip4;
 }
 
-void eth_set_dest(uint8_t ip1, uint8_t ip2, uint8_t ip3, uint8_t ip4)
+void udp_printf(dest_ip_t ip, uint16_t port, const char *format, ...)
 {
-    ip_dst1 = ip1;
-    ip_dst2 = ip2;
-    ip_dst3 = ip3;
-    ip_dst4 = ip4;
-}
-
-void udp_printf(const char *format, ...)
-{
-    uint8_t payload[MAX_UDP_PAYLOAD_SIZE] = {0};
+    struct udp_payload payload;
     va_list args;
     va_start(args, format);
-    vsprintf(payload, format, args);
-    queue_add_blocking(&udp_payload_queue, payload);
+    vsprintf(payload.data, format, args);
+
+    payload.ip = ip;
+    payload.port = port;
+    queue_add_blocking(&udp_payload_queue, &payload);
     va_end(args);
 }
