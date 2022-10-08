@@ -537,13 +537,6 @@ static bool nlp_timer_callback(struct repeating_timer *t)
     return true;
 }
 
-struct udp_payload
-{
-    dest_ip_t ip;
-    uint16_t port;
-    uint8_t data[MAX_UDP_PAYLOAD_SIZE];
-};
-
 void core1_entry()
 {
     eth_init();
@@ -557,18 +550,17 @@ void core1_entry()
 
     while (1)
     {
-        struct udp_payload payload;
+        udp_payload payload;
         if (!queue_is_empty(&udp_payload_queue))
         {
             queue_remove_blocking(&udp_payload_queue, &payload);
-            uint16_t payloadLength = strlen(payload.data);
+            // uint16_t payloadLength = strlen(payload.data);
             state.transmitting = true;
-            eth_transmit_udp(payload.data, payloadLength, payload.port, payload.port, payload.ip);
+            eth_transmit_udp(payload.data, payload.length, payload.port, payload.port, payload.ip);
             state.ticks = 0;
             state.transmitting = false;
-
         }
-        else  if (state.ticks >= 1)
+        else if (state.ticks >= 1)
         {
             state.transmitting = true;
             ser_10base_t_tx_10b(pio_ser_wr, 0, 0x0000000A); // send NLP
@@ -604,6 +596,22 @@ void udp_printf(dest_ip_t ip, uint16_t port, const char *format, ...)
 
     payload.ip = ip;
     payload.port = port;
-    queue_add_blocking(&udp_payload_queue, &payload);
+    payload.length = strlen(payload.data);
+    udp_send_payload(&payload);
     va_end(args);
+}
+
+void udp_send_data(dest_ip_t ip, uint16_t port, uint8_t data[], uint16_t length)
+{
+    udp_payload payload;
+    payload.ip = ip;
+    payload.port = port;
+    payload.length = length;
+    memcpy(payload.data, data, length);
+    udp_send_payload(&payload);
+}
+
+void udp_send_payload(udp_payload *payload)
+{
+    queue_try_add(&udp_payload_queue, payload);
 }

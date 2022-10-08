@@ -14,4 +14,5 @@ target_link_libraries(
     hardware_irq
     pico_multicore
     pico_unique_id
-    pico_stdlib)
+    pico_stdlib
+    )

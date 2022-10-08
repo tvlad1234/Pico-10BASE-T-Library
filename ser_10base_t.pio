@@ -37,8 +37,9 @@
 
         sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
 
-        // 125MHz / 6.25 = 20MHz
-        sm_config_set_clkdiv(&c, 6.25);
+        // We need a 20MHz clock for the PIO.
+        uint32_t currentClk = clock_get_hz(5)/1000000;
+        sm_config_set_clkdiv(&c, currentClk/20.0);
 
         pio_sm_init(pio, sm, offset, &c);
         pio_sm_set_enabled(pio, sm, true);
